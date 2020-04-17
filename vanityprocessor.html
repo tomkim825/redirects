@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html lang="EN-us">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vanity URL Processor</title>
+<!-- CSS HERE -->
+  <style>
+    body{padding: 0 2%; color:#fff; background-color: #000;box-sizing: border-box;}
+    #inputField{width: 100%; height:75%;} 
+    button{margin: 16px 0px;}
+    #duplicate-bar{display:none;text-align: center;}
+    #duplicate-bar li{margin: 14px auto;}
+    .container{display:flex;flex-direction: row;align-items: center;}
+    .yellow,.line1{color:yellow;}
+    .line2{color: goldenrod;}
+    .red{color:red;}
+    .salmon{color:salmon;}
+    .small{font-size:50%;}
+  </style>
+</head>
+
+<!-- HTML BODY HERE -->
+<body>
+  <h1>Vanity URL processor</h1>
+  <p id="instructions">Paste Legacy redirects.conf below</p>
+  <div class='container'>
+    <textarea rows="30" cols="100" id="inputField" input=""> </textarea>
+    <div id="duplicate-bar">Good News:<br>no duplicate entries to delete in redirects.conf</div>
+  </div>
+  <button id="importbtn" onclick="importVanities()">Import existing redirects</button> 
+  <button id="addVanities" onclick="addVanities()" style="display:none">Add new vanities</button> 
+  <button id="cleanDuplicates" onclick="cleanDuplicates()" style="display:none">Clean up redirect chains</button> 
+  <p id="status"></p>
+</body>
+
+<!-- JAVASCRIPT HERE -->
+<script>
+let inputField = document.getElementById("inputField");
+let status = document.getElementById("status");
+let duplicateBar = document.getElementById("duplicate-bar");
+const clearTxtArea = () => inputField.value = ''; 
+clearTxtArea(); //remove initial space in text box upon initialization
+let storedRedirectsArray;
+let newVanities=''; 
+let splitByRows;
+let duplicateRecordArray = [];  
+let newArray1 = [];
+let newArray2 = [];
+let newArray3 = [];
+
+const importVanities = () => {   
+  let storedRedirects = inputField.value.trim().split(/\r|\r\n|\n/);
+  storedRedirectsArray = storedRedirects;
+  status.innerHTML = `${storedRedirects.length} lines successfully imported`;
+  clearTxtArea(); 
+  document.getElementById("instructions").innerHTML = 'Paste new redirects below';
+  document.getElementById("addVanities").style.display = 'block';
+  document.getElementById("importbtn").style.display = 'none';
+}
+
+const addVanities = () => {
+  let newRedirects = inputField.value.trim();
+  splitByRows = newRedirects.split(/\r|\r\n|\n/);
+  for (i=0; i<splitByRows.length; i++) {
+        splitByRows[i] = splitByRows[i].split(String.fromCharCode(9));
+    }
+    newTable = document.createElement("table")
+    newTable.border = 1;
+    for (i=0; i<splitByRows.length; i++) {
+        newRow = newTable.insertRow();
+        for (j=0; j<splitByRows[i].length; j++) {
+            newCell = newRow.insertCell();
+            if (splitByRows[i][j].length == 0) {
+                newCell.innerText = ' ';
+            }
+           else {
+                newCell.innerText = splitByRows[i][j].trim();
+            }
+        }
+        let newStr = `^${splitByRows[i][0].trim()}$`;
+        if (storedRedirectsArray.filter(elem => elem.includes(newStr)).length>1) {window.alert('multiple results found for ' + newStr)}
+        if (storedRedirectsArray.filter(elem => elem.includes(newStr)).length){
+          duplicateRecordArray.push({'item':`${storedRedirectsArray.find(elem => elem.includes(newStr))}`, 'index':`${storedRedirectsArray.findIndex(elem => elem.includes(newStr))}`})
+          newRow.classList.add('yellow')
+        }
+
+      }
+    for (i=0; i<splitByRows.length; i++) {
+      if( splitByRows[i][1] == undefined ) {alert('Error: please refresh page and copy correct data format')}
+      newVanities = newVanities + `RewriteRule ^${splitByRows[i][0].trim()}$ ${splitByRows[i][1].trim()} [L,R=301,NC,NE]\n`
+    }
+    document.body.appendChild(newTable);
+    inputField.value = newVanities;
+    inputField.style.background = '#444';
+    inputField.style.color = '#fff';
+    inputField.rows = splitByRows.length;
+    inputField.select();
+    document.execCommand("copy");
+    status.innerHTML = splitByRows.length + " new redirects successfully generated\n\n"
+    document.getElementById("instructions").innerHTML = 'New rewrite rules have been copied to clipboard, you can paste into redirects.conf file'; 
+    document.getElementById("addVanities").style.display = 'none';
+    document.getElementById("cleanDuplicates").style.display = 'block';
+    duplicateBar.style.display = 'flex';
+    if (duplicateRecordArray.length > 0) {
+      let sortedDuplicates = duplicateRecordArray.sort(function(a, b){return a.index - b.index});
+      var ul = document.createElement('ul');
+		  duplicateBar.innerHTML ='';
+		  duplicateBar.style.textAlign ='left';
+      duplicateBar.appendChild(ul);
+      sortedDuplicates.forEach(function(duplicate,index){
+        let li = document.createElement('li');
+        ul.appendChild(li);
+        li.innerHTML = `Duplicate found at <span class="red">line ${parseInt(duplicate.index) - index + 1}</span> (originally <span class="red">line ${parseInt(duplicate.index)+1}</span>):<br/> <span class="yellow">${duplicate.item}</span>`
+      })
+    }
+  }
+ 
+const cleanDuplicates = () => {
+  status.innerHTML = "";
+  clearTxtArea(); 
+  document.getElementById("cleanDuplicates").style.display = 'none';
+  document.getElementById("duplicate-bar").style.display = 'none';
+  document.querySelector('table').style.display = 'none';
+  document.querySelector('.container').style.display = 'none';
+
+  storedRedirectsArray.forEach(function(item,index){
+    try{
+      let newItem = item.split('RewriteRule ^')[1].split('$')[0];
+      let newItem2 = item.split('$')[1].split('[')[0].trim()
+      if(!item.includes('RewriteCond')){newArray1.push({'URL':newItem,'index':index+1})}
+      newArray2.push({'URL':newItem2,'index':index+1})
+    } catch(err){console.log(err)}
+  })
+  for (i=0; i<newArray1.length; i++ ){
+    newArray2.forEach(function(each){
+      if(each.URL == newArray1[i].URL){
+        newArray3.push({URL:each.URL,index:each.index,index2:newArray1[i].index})
+      }
+    })
+  }
+  document.getElementById("instructions").style.fontSize = '175%';
+  document.getElementById("instructions").innerHTML = `Speed up our site! <span class="red">${newArray3.length}</span> potential redirect chains found!`;
+  var ul = document.createElement('ul');
+  document.body.appendChild(ul);
+  
+  let sortedDuplicates2 = newArray3.sort(function(a, b){return a.index - b.index});
+  sortedDuplicates2.forEach(function(e,index){
+    let li = document.createElement('li');
+    ul.appendChild(li);
+    li.innerHTML = `At line ${parseInt(e.index) - index}<span class="small">(originally line ${e.index})</span>, redirect goes to <span class="salmon">${e.URL}</span>, but will then later redirect again to <span class="salmon">${storedRedirectsArray[parseInt(e.index2)-1].split('$')[1].split('[')[0].trim()}</span>:<p class="line1">At line ${parseInt(e.index) - index}<span class="small">(originally line ${e.index})</span>: ${storedRedirectsArray[parseInt(e.index)-1]}</p><p class="line2">At line ${parseInt(e.index2) - index}<span class="small">(originally line ${e.index2})</span>: ${storedRedirectsArray[parseInt(e.index2)-1]}</p><p>Consider updating line ${parseInt(e.index) - index}<span class="small">(originally line ${e.index})</span> to go directly to ${storedRedirectsArray[parseInt(e.index2)-1].split('$')[1].split('[')[0].trim()}</p><hr>`
+  })
+}
+</script>
+</html>
